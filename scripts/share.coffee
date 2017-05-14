@@ -1,9 +1,30 @@
+request = require 'request-promise'
+PRIVACY = process.env.PRIVACY
+ACCESS_TOKEN = process.env.ACCESS_TOKEN
+LOG_ROOM = process.env.LOG_ROOM
+
 module.exports = (robot) ->
-  robot.hear /シェア[^]+(https?:\/\/[^\s]+)/i, (res) ->
-    link = res.match[1]
+  check_excluded = (link) ->
     excluded = robot.brain.get("excluded")?.split("|") or []
-    res.send "test #{res.match[1]}" if excluded.reduce (prev, cur) -> cur or prev.includes link
-    , false
+    for ex in excluded
+      return false if link.includes(ex)
+    true
+
+  robot.hear /シェア/i, (res) ->
+    links = res.message.text.match(/https?:\/\/[^\s]+/ig) || []
+    links = links.filter (link) -> check_excluded(link)
+    links.reduce (promise, link) ->
+      promise.then ->
+        robot.messageRoom LOG_ROOM, "Sharing #{link}"
+        request.post
+          url: "https://graph.facebook.com/v2.9/me/feed?access_token=#{ACCESS_TOKEN}",
+          form: link: link, privacy: PRIVACY
+      .then ->
+        robot.messageRoom LOG_ROOM, "Done!"
+        Promise.resolve()
+    , Promise.resolve()
+    .catch () ->
+      robot.messageRoom LOG_ROOM, "Failed!"
 
   robot.respond /add to exclude list\s+(.+)/, (res) ->
     excluded = robot.brain.get("excluded")?.split("|") or []
