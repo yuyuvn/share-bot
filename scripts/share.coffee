@@ -9,22 +9,21 @@ module.exports = (robot) ->
     for ex in excluded
       return false if link.includes(ex)
     true
-
   robot.hear /シェア/i, (res) ->
     links = res.message.text.match(/https?:\/\/[^\s]+/ig) || []
     links = links.filter (link) -> check_excluded(link)
-    links.reduce (promise, link) ->
-      promise.then ->
-        robot.messageRoom LOG_ROOM, "Sharing #{link}"
-        request.post
-          url: "https://graph.facebook.com/v2.9/me/feed?access_token=#{ACCESS_TOKEN}",
-          form: link: link, privacy: PRIVACY
+
+    Promise.all links.map (link) ->
+      robot.messageRoom LOG_ROOM, "Sharing #{link}"
+      request.post
+        url: "https://graph.facebook.com/v2.9/me/feed?access_token=#{ACCESS_TOKEN}",
+        form: link: link, privacy: PRIVACY
       .then ->
-        robot.messageRoom LOG_ROOM, "Done!"
+        robot.messageRoom LOG_ROOM, "Shared #{link}"
         Promise.resolve()
-    , Promise.resolve()
-    .catch () ->
-      robot.messageRoom LOG_ROOM, "Failed!"
+      .catch (error) ->
+        robot.messageRoom LOG_ROOM, "Failed!", error
+
 
   robot.respond /add to exclude list\s+(.+)/, (res) ->
     excluded = robot.brain.get("excluded")?.split("|") or []
